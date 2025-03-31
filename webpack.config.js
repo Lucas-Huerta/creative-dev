@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   mode: 'development',
@@ -17,6 +18,11 @@ module.exports = {
       title: 'Mon Projet 3D avec Three.js',
       template: './src/index.html',
     }),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'public', to: '' },
+      ],
+    }),
   ],
   module: {
     rules: [
@@ -33,6 +39,10 @@ module.exports = {
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
+      },
+      {
+        test: /\.(glb|gltf)$/,
+        type: 'asset/resource',
       },
     ],
   },

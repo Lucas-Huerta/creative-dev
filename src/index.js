@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import './style.css';
 import { vertexShader, fragmentShader } from './shaders/blobShaders.js';
+import { gsap } from 'gsap';
+
 
 class ThreeJSScene {
     constructor() {
@@ -10,6 +13,13 @@ class ThreeJSScene {
         this.renderer = null;
         this.controls = null;
         this.sphere = null;
+        this.loader = new ColladaLoader();
+        this.mixer = null;
+        this.scrollY = 0;
+        this.targetScrollY = 0;
+        this.scrollSpeed = 0.1;
+        this.cameraPath = [];
+        this.totalPathLength = 100;
 
         this.container = document.getElementById('scene-container');
         
@@ -24,11 +34,13 @@ class ThreeJSScene {
         this.scene.background = new THREE.Color(0x333333);
         
         this.camera = new THREE.PerspectiveCamera(
-            75, 
+            30, 
             window.innerWidth / window.innerHeight, 
             0.1, 
-            1000
+            2000
         );
+        this.camera.position.x = 0;
+        this.camera.position.y = 2000;
         this.camera.position.z = 5;
         
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -39,6 +51,7 @@ class ThreeJSScene {
         this.addShapes();
         this.addLights();
         window.addEventListener('resize', () => this.onWindowResize());
+        window.addEventListener('wheel', (e) => this.onScroll(e), { passive: false });
     }
     
     setupControls() {
@@ -48,8 +61,9 @@ class ThreeJSScene {
         
         this.controls.screenSpacePanning = false;
         
-        this.controls.minDistance = 2;     // Distance minimale de zoom
-        this.controls.maxDistance = 10;    // Distance maximale de zoom
+        this.mixer = new THREE.AnimationMixer();
+        this.controls.minDistance = 2; 
+        this.controls.maxDistance = 10;
         
         this.controls.maxPolarAngle = Math.PI;
     }
@@ -67,12 +81,43 @@ class ThreeJSScene {
             },
             vertexShader: vertexShader,
             // gère les couleurs
-            fragmentShader: fragmentShader,
+            // fragmentShader: fragmentShader,
             wireframe: false
         });
         
         this.sphere = new THREE.Mesh(sphereGeometry, blobMaterial);
-        this.scene.add(this.sphere);
+
+        this.loader.load('./model.dae', ( collada ) => {
+            const avatar = collada.scene;
+            avatar.scale.set(2,2,2);
+            avatar.position.y = -2;
+
+            const animations = collada.animations;
+            this.mixer = new THREE.AnimationMixer( avatar );
+            if (animations && animations.length) {
+                animations.forEach( ( clip ) => {
+                    this.mixer.clipAction(clip).play();
+                } );
+            }
+            this.scene.add( avatar );
+
+            this.generateCameraPath();
+        } );
+    }
+
+    generateCameraPath(){
+        for (let i = 0; i < this.totalPathLength; i++) {
+            const t = i / this.totalPathLength;
+            const point = {
+            position: new THREE.Vector3(
+                Math.sin(t * Math.PI * 2) * 5,
+                t * 10, // Moving upward along the model
+                Math.cos(t * Math.PI * 2) * 5
+            ),
+            lookAt: new THREE.Vector3(0, t * 10, 0) // Look at the center of the model
+            };
+        this.cameraPath.push(point);
+  }
     }
     
     addLights() {
@@ -83,24 +128,49 @@ class ThreeJSScene {
         directionalLight.position.set(1, 1, 1);
         this.scene.add(directionalLight);
     }
+
+    updateCamera() {
+        this.scrollY += (this.targetScrollY - this.scrollY) * this.scrollSpeed;
+        if (this.cameraPath.length > 0) {
+          const pathIndex = Math.floor(this.scrollY);
+          const pathPercent = this.scrollY - pathIndex;
+          
+          if (pathIndex < this.cameraPath.length - 1) {
+            // Interpolate between two points on the path
+            const currentPoint = this.cameraPath[pathIndex];
+            const nextPoint = this.cameraPath[pathIndex + 1];
+            
+            // Position
+            this.camera.position.lerpVectors(
+              currentPoint.position,
+              nextPoint.position,
+              pathPercent
+            );
+            
+            // Look at point
+            const lookAtPos = new THREE.Vector3();
+            lookAtPos.lerpVectors(
+              currentPoint.lookAt,
+              nextPoint.lookAt,
+              pathPercent
+            );
+            this.camera.lookAt(lookAtPos);
+          }
+        }
+      }
+
+    update() {
+        if (this.mixer) {
+            const delta = this.clock.getDelta();
+            this.mixer.update(delta);
+        }
+    }
     
     animate() {
         requestAnimationFrame(() => this.animate());
-        
-        const elapsedTime = this.clock.getElapsedTime();
-        
-        // Mettre à jour l'uniform de temps pour l'animation du blob
-        if (this.sphere && this.sphere.material.uniforms) {
-            this.sphere.material.uniforms.uTime.value = elapsedTime;
-            
-            // Animer également l'intensité du bruit pour plus de dynamisme
-            this.sphere.material.uniforms.uNoiseIntensity.value = 0.1 + Math.sin(elapsedTime * 0.5) * 0.1;
-            // Animer la fréquence pour varier la vitesse de déformation
-            this.sphere.material.uniforms.uFrequency.value = 1.0 + Math.sin(elapsedTime * 0.2) * 0.2;
-        }
-        
-        this.sphere.rotation.x += 0.005;
-        this.sphere.rotation.y += 0.005;
+
+        this.update();
+        this.updateCamera();
         
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
@@ -111,6 +181,12 @@ class ThreeJSScene {
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
+
+    onScroll(event) {
+        this.targetScrollY += event.deltaY * 0.01;
+        this.targetScrollY = Math.max(0, Math.min(this.totalPathLength - 1, this.targetScrollY));
+        event.preventDefault();
+      }
 }
 
 // Créer une instance de la scène

@@ -16,12 +16,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "gsap": "^3.12.7",
     "three": "^0.150.0"
   },
   "devDependencies": {
     "@babel/core": "^7.21.0",
     "@babel/preset-env": "^7.20.2",
     "babel-loader": "^9.1.2",
+    "copy-webpack-plugin": "^13.0.0",
     "css-loader": "^6.7.3",
     "html-webpack-plugin": "^5.5.0",
     "style-loader": "^3.3.1",

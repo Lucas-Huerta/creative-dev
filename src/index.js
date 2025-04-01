@@ -27,6 +27,9 @@ class ThreeJSScene {
         this.textOpacity = 1.0;
         this.targetTextOpacity = 1.0;
         this.textFadeSpeed = 0.05;
+        this.loadingManager = new THREE.LoadingManager();
+        this.loadingComplete = false;
+        this.setupLoadingManager();
 
         this.container = document.getElementById('scene-container');
         
@@ -34,6 +37,39 @@ class ThreeJSScene {
         
         this.init();
         this.animate();
+    }
+
+    setupLoadingManager() {
+        const loadingElement = document.createElement('div');
+        loadingElement.id = 'loading-screen';
+        loadingElement.innerHTML = `
+            <div class="loading-container">
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="loading-percentage">0%</div>
+            </div>
+        `;
+        document.body.appendChild(loadingElement);
+
+        this.loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+            const progressPercent = Math.round((itemsLoaded / itemsTotal) * 100);
+            document.querySelector('.progress-fill').style.width = `${progressPercent}%`;
+            document.querySelector('.loading-percentage').textContent = `${progressPercent}%`;
+        };
+
+        this.loadingManager.onLoad = () => {
+            this.loadingComplete = true;
+            document.getElementById('loading-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.display = 'none';
+            }, 1000);
+        };
+
+        this.loadingManager.onError = (url) => {
+            console.error('Error loading:', url);
+            document.querySelector('.loading-container h2').textContent = 'Error loading 3D content';
+        };
     }
 
     init() {
@@ -110,7 +146,7 @@ class ThreeJSScene {
     }
 
     addText() {
-        const fontLoader = new FontLoader();
+        const fontLoader = new FontLoader(this.loadingManager);
         
         fontLoader.load('./typos/helvetiker_regular.typeface.json', (font) => {
             const textGeometry = new TextGeometry('Lucas Huerta', {
@@ -328,6 +364,12 @@ class ThreeJSScene {
     
     animate() {
         requestAnimationFrame(() => this.animate());
+        
+        if (!this.loadingComplete) {
+            // Only render loading screen
+            return;
+        }
+        
         this.update();
         this.updateCamera();
         this.renderer.render(this.scene, this.camera);

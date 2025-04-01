@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import './style.css';
 import { vertexShader } from './shaders/blobShaders.js';
 import { CardManager } from './components/CardManager.js';
@@ -20,6 +22,8 @@ class ThreeJSScene {
         this.modelLoaded = false;
         this.modelHeight = 0;
         this.cardManager = null;
+        this.mouse = new THREE.Vector2();
+        this.textMesh = null;
 
         this.container = document.getElementById('scene-container');
         
@@ -47,11 +51,13 @@ class ThreeJSScene {
         
         this.addShapes();
         this.addLights();
+        this.addText();
         
         this.cardManager = new CardManager(this.scene);
         
         window.addEventListener('resize', () => this.onWindowResize());
         window.addEventListener('wheel', (e) => this.onScroll(e), { passive: false });
+        window.addEventListener('mousemove', (e) => this.onMouseMove(e));
     }
     
     addShapes() {        
@@ -80,7 +86,7 @@ class ThreeJSScene {
             const center = box.getCenter(new THREE.Vector3());
             
             this.modelHeight = size.y;            
-            avatar.position.copy(center).multiplyScalar(-1);
+            avatar.position.copy(center).multiplyScalar(-0.75);
             
             const animations = collada.animations;
             this.mixer = new THREE.AnimationMixer(avatar);
@@ -97,6 +103,101 @@ class ThreeJSScene {
             this.modelLoaded = true;
             this.camera.position.copy(this.cameraPath[0].position);
             this.camera.lookAt(this.cameraPath[0].lookAt);
+        });
+    }
+
+    addText() {
+        const fontLoader = new FontLoader();
+        
+        fontLoader.load('./typos/helvetiker_regular.typeface.json', (font) => {
+            const textGeometry = new TextGeometry('Lucas Huerta', {
+                font: font,
+                size: 1,
+                height: 0.2,
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.03,
+                bevelSize: 0.02,
+                bevelOffset: 0,
+                bevelSegments: 5
+            });
+            
+            // Center the text
+            textGeometry.computeBoundingBox();
+            const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+            
+            const textMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0.0 },
+                    uMouse: { value: new THREE.Vector2(0, 0) },
+                    uHover: { value: 0.0 }
+                },
+                vertexShader: `
+                    uniform float uTime;
+                    uniform vec2 uMouse;
+                    uniform float uHover;
+                    
+                    varying vec2 vUv;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        vUv = uv;
+                        vPosition = position;
+                        
+                        // Calculate distance to mouse position for distortion
+                        float dist = distance(vec3(uMouse.x, uMouse.y, 0.0), position);
+                        float distortionFactor = 0.2 * uHover * smoothstep(0.8, 0.0, dist);
+                        
+                        // Apply wave distortion based on hover
+                        vec3 newPosition = position;
+                        newPosition.x += sin(position.y * 10.0 + uTime * 4.0) * distortionFactor;
+                        newPosition.y += cos(position.x * 10.0 + uTime * 4.0) * distortionFactor;
+                        
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                varying vec2 vUv;
+                varying vec3 vPosition;
+
+                uniform float uTime;
+                uniform float uHover;
+                uniform vec2 uMouse;
+
+                void main() {
+                    // Calculate distance from position to mouse for the hover effect
+                    float dist = distance(vec2(vPosition.x, vPosition.y), uMouse);
+                    float glow = smoothstep(0.8, 0.0, dist) * uHover;
+                    
+                    // Base white color
+                    vec3 baseColor = vec3(1.0);
+                    
+                    // Blue accent color (royal blue)
+                    vec3 accentColor = vec3(0.0, 0.28, 0.67);
+                    
+                    // Mix between white and blue based on hover and distance
+                    vec3 finalColor = mix(baseColor, accentColor, glow);
+                    
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+                    `,
+            });
+            
+            this.textMesh = new THREE.Mesh(textGeometry, textMaterial);
+            this.textMesh.position.set(-textWidth/2, 0, -15);
+            
+            this.camera.add(this.textMesh);
+            
+            // Add the camera to the scene (important!)
+            this.scene.add(this.camera);
+            
+            console.log("Text mesh added to camera", this.textMesh);
+        }, 
+        (xhr) => {
+            console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+        },
+        (error) => {
+            console.error('An error happened while loading the font:', error);
         });
     }
 
@@ -189,6 +290,10 @@ class ThreeJSScene {
         if (this.cardManager) {
             this.cardManager.update(this.clock.getElapsedTime());
         }
+
+        if (this.textMesh && this.textMesh.material.uniforms) {
+            this.textMesh.material.uniforms.uTime.value = this.clock.getElapsedTime();
+        }
     }
     
     animate() {
@@ -208,6 +313,39 @@ class ThreeJSScene {
         this.targetScrollY += event.deltaY * 0.01;
         this.targetScrollY = Math.max(0, Math.min(this.totalPathLength - 1, this.targetScrollY));
         event.preventDefault();
+    }
+
+    onMouseMove(event) {
+        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        
+        // Raycaster to detect hover on text
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(this.mouse, this.camera);
+        
+        if (this.textMesh) {
+            const intersects = raycaster.intersectObject(this.textMesh);
+            
+            if (intersects.length > 0) {
+                // Text is hovered, increase hover value for distortion
+                this.textMesh.material.uniforms.uHover.value = 1.0;
+                
+                // Calculate local intersection point for more precise hover effect
+                const intersectionPoint = intersects[0].point.clone();
+                this.textMesh.worldToLocal(intersectionPoint);
+                
+                // Update mouse position in the material with local coordinates
+                this.textMesh.material.uniforms.uMouse.value.set(
+                    intersectionPoint.x,
+                    intersectionPoint.y
+                );
+            } else {
+                // Gradually reduce hover value when not hovering
+                if (this.textMesh.material.uniforms.uHover.value > 0) {
+                    this.textMesh.material.uniforms.uHover.value *= 0.95;
+                }
+            }
+        }
     }
 }
 

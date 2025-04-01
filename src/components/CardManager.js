@@ -10,44 +10,37 @@ export class CardManager {
     }
     
     setupCardTriggers(cameraPath, modelBox) {
-        const numCards = 2;
+        // Increase the number of cards and distribute them more evenly
+        const cardCount = 10; // Increased from the original number
+        const cardSpacing = cameraPath.length / (cardCount + 1);
         
-        // Calculate even spacing along the entire path
-        const pathLength = cameraPath.length - 1;
-        const spacing = pathLength / (numCards + 1);
-        
-        const centerX = (modelBox.min.x + modelBox.max.x) / 2;
-        const centerZ = (modelBox.min.z + modelBox.max.z) / 2;
-        const modelWidth = modelBox.max.x - modelBox.min.x;
-        
-        for (let i = 0; i < numCards; i++) {
-            const pathIndex = Math.floor(spacing * (i + 1));
+        for (let i = 0; i < cardCount; i++) {
+            // Calculate the path index with better spacing
+            const pathIndex = Math.floor((i + 1) * cardSpacing);
             
-            this.triggerPoints.push({
-                pathPosition: pathIndex,
-                fadeDuration: 40,
-            });
-            
-            // Create the card
-            const card = this.createCard(i);
-            
-            // Position card to the side of the model
-            const sideOffset = modelWidth * 1.5;
-            const side = i % 2 === 0 ? 1 : -1; // Alternate sides
-            
-            // Position at same height as the corresponding camera path point
-            card.position.set(
-                centerX + (sideOffset * side),
-                cameraPath[pathIndex].position.y,
-                centerZ
-            );
-            
-            // Rotate card to face the camera path
-            card.lookAt(cameraPath[pathIndex].position);
-            
-            this.cards.push(card);
-            this.cardVisibility.push(0); // Start with 0 visibility
-            this.scene.add(card);
+            if (pathIndex < cameraPath.length) {
+                const pathPoint = cameraPath[pathIndex];
+                
+                // Create a wider radius around the character to avoid crowding
+                const angle = Math.random() * Math.PI * 2;
+                const radiusMin = 8; // Minimum distance from character
+                const radiusMax = 15; // Maximum distance
+                const radius = radiusMin + Math.random() * (radiusMax - radiusMin);
+                
+                // Randomize height within a reasonable range around the path point
+                const heightVariation = 2;
+                const height = pathPoint.position.y + (Math.random() * heightVariation * 2 - heightVariation);
+                
+                // Create a card with these randomly distributed positions
+                const cardPosition = new THREE.Vector3(
+                    Math.sin(angle) * radius,
+                    height,
+                    Math.cos(angle) * radius
+                );
+                
+                // Add the card at this position
+                this.addCard(cardPosition, pathIndex);
+            }
         }
     }
     
@@ -95,6 +88,23 @@ export class CardManager {
                 this.cards[index].material.uniforms.uVisibility.value = this.cardVisibility[index];
             }
         });
+    }
+    
+
+    addCard(position, pathIndex) {
+        const card = this.createCard(this.cards.length);
+        card.position.copy(position);
+        this.scene.add(card);
+        this.cards.push(card);
+        
+        // Store trigger point for this card
+        this.triggerPoints.push({
+            pathPosition: pathIndex,
+            fadeDuration: 20 // Distance in scroll units where card fades in/out
+        });
+        
+        // Store initial visibility for this card
+        this.cardVisibility.push(0);
     }
     
     update(time) {

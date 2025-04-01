@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import './style.css';
@@ -12,7 +12,7 @@ class ThreeJSScene {
         this.camera = null;
         this.renderer = null;
         this.sphere = null;
-        this.loader = new ColladaLoader();
+        this.loader = new GLTFLoader();
         this.mixer = null;
         this.scrollY = 0;
         this.targetScrollY = 0;
@@ -116,9 +116,10 @@ class ThreeJSScene {
         
         this.sphere = new THREE.Mesh(sphereGeometry, blobMaterial);
 
-        this.loader.load('./HeadYes.dae', (collada) => {
-            const avatar = collada.scene;
+        this.loader.load('./final.glb', (gltf) => {
+            const avatar = gltf.scene;
             avatar.scale.set(2, 2, 2);
+            avatar.rotation.y = Math.PI;
             
             const box = new THREE.Box3().setFromObject(avatar);
             const size = box.getSize(new THREE.Vector3());
@@ -127,7 +128,7 @@ class ThreeJSScene {
             this.modelHeight = size.y;            
             avatar.position.copy(center).multiplyScalar(-0.75);
             
-            const animations = collada.animations;
+            const animations = gltf.animations;
             this.mixer = new THREE.AnimationMixer(avatar);
             if (animations && animations.length) {
                 animations.forEach((clip) => {
@@ -280,7 +281,7 @@ class ThreeJSScene {
                     y,
                     centerZ + Math.cos(angle) * radius
                 ),
-                lookAt: new THREE.Vector3(centerX, y, centerZ) // Look at the spine of the model at current height
+                lookAt: new THREE.Vector3(centerX, y, centerZ)
             };
             
             this.cameraPath.push(point);
@@ -295,9 +296,18 @@ class ThreeJSScene {
         const ambientLight = new THREE.AmbientLight(0x404040);
         this.scene.add(ambientLight);
         
+        // Add opposite ambient light for more balanced lighting
+        const secondaryAmbientLight = new THREE.AmbientLight(0x303030);
+        this.scene.add(secondaryAmbientLight);
+        
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(1, 1, 1);
         this.scene.add(directionalLight);
+        
+        // Add opposite directional light
+        const secondaryDirectionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        secondaryDirectionalLight.position.set(-1, 0.5, -1);
+        this.scene.add(secondaryDirectionalLight);
     }
 
     updateCamera() {

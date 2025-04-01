@@ -6,11 +6,18 @@
     <title>Mon Projet 3D avec Three.js</title>
 </head>
 <body>
-    <h1 id="info">
+    <h1 id="text-info">
         You're best fullstack developer
     </h1>
-    <div class="scroll-indicator">Scroll to explore the model</div>
+    <div class="scroll-indicator">
+        Scroll to explore the model
+        <svg class="scroll-arrow" width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 20L4 12H9V4H15V12H20L12 20Z" fill="currentColor" />
+        </svg>
+    </div>
 
     <div id="scene-container"></div>
+    
+    <script type="module" src="./index.js"></script>
 </body>
 </html>

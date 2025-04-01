@@ -24,6 +24,9 @@ class ThreeJSScene {
         this.cardManager = null;
         this.mouse = new THREE.Vector2();
         this.textMesh = null;
+        this.textOpacity = 1.0;
+        this.targetTextOpacity = 1.0;
+        this.textFadeSpeed = 0.05;
 
         this.container = document.getElementById('scene-container');
         
@@ -130,7 +133,8 @@ class ThreeJSScene {
                 uniforms: {
                     uTime: { value: 0.0 },
                     uMouse: { value: new THREE.Vector2(0, 0) },
-                    uHover: { value: 0.0 }
+                    uHover: { value: 0.0 },
+                    uOpacity: { value: 1.0 }
                 },
                 vertexShader: `
                     uniform float uTime;
@@ -163,6 +167,7 @@ class ThreeJSScene {
                 uniform float uTime;
                 uniform float uHover;
                 uniform vec2 uMouse;
+                uniform float uOpacity;
 
                 void main() {
                     // Calculate distance from position to mouse for the hover effect
@@ -178,21 +183,34 @@ class ThreeJSScene {
                     // Mix between white and blue based on hover and distance
                     vec3 finalColor = mix(baseColor, accentColor, glow);
                     
-                    gl_FragColor = vec4(finalColor, 1.0);
+                    gl_FragColor = vec4(finalColor, uOpacity); 
                 }
                     `,
+                transparent: true,
             });
             
             this.textMesh = new THREE.Mesh(textGeometry, textMaterial);
-            this.textMesh.position.set(-textWidth/2, 0, -15);
+            // Position text in center of the hero section
+            this.textMesh.position.set(-textWidth/2, 8, -10);
+
+            // Create a fixed camera and scene specifically for the text
+            this.textScene = new THREE.Scene();
+            this.textCamera = new THREE.PerspectiveCamera(
+                30, 
+                window.innerWidth / window.innerHeight, 
+                0.1, 
+                100
+            );
+            this.textCamera.position.set(0, 8, 10);
+            this.textCamera.lookAt(0, 8, 0);
+            this.textScene.add(this.textMesh);
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            this.textScene.add(ambientLight);
             
-            this.camera.add(this.textMesh);
-            
-            // Add the camera to the scene (important!)
-            this.scene.add(this.camera);
-            
-            console.log("Text mesh added to camera", this.textMesh);
-        }, 
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1);
+            this.textScene.add(directionalLight);
+            }, 
         (xhr) => {
             console.log((xhr.loaded / xhr.total * 100) + '% loaded');
         },
@@ -253,6 +271,18 @@ class ThreeJSScene {
         const pathIndex = Math.floor(this.scrollY);
         const pathPercent = this.scrollY - pathIndex;
         
+        if (this.scrollY < 1.0) {
+            this.targetTextOpacity = 1.0;
+        } else {
+            this.targetTextOpacity = 0.0;
+        }
+        
+        this.textOpacity += (this.targetTextOpacity - this.textOpacity) * this.textFadeSpeed;
+        
+        if (this.textMesh && this.textMesh.material.uniforms) {
+            this.textMesh.material.uniforms.uOpacity.value = this.textOpacity;
+        }
+        
         if (this.cardManager) {
             this.cardManager.updateCards(this.scrollY);
         }
@@ -301,11 +331,26 @@ class ThreeJSScene {
         this.update();
         this.updateCamera();
         this.renderer.render(this.scene, this.camera);
+        
+        // Render text scene on top with its own fixed camera
+        if (this.textScene && this.textCamera) {
+            // Enable autoClear false to avoid clearing the first render
+            this.renderer.autoClear = false;
+            this.renderer.render(this.textScene, this.textCamera);
+            this.renderer.autoClear = true;
+        }
     }
     
     onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
+        
+        // Also update text camera if it exists
+        if (this.textCamera) {
+            this.textCamera.aspect = window.innerWidth / window.innerHeight;
+            this.textCamera.updateProjectionMatrix();
+        }
+        
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
@@ -319,11 +364,10 @@ class ThreeJSScene {
         this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        // Raycaster to detect hover on text
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(this.mouse, this.camera);
-        
         if (this.textMesh) {
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(this.mouse, this.textCamera);
+            
             const intersects = raycaster.intersectObject(this.textMesh);
             
             if (intersects.length > 0) {

@@ -1,69 +1,122 @@
 import * as THREE from 'three';
-import { cardVertexShader, cardFragmentShader } from '../shaders/cardShaders.js';
+import { cardVertexShader } from '../shaders/cardShaders.js';
+import { tabProjectCard } from '../lib/index.ts';
 
 export class CardManager {
     constructor(scene) {
         this.scene = scene;
         this.cards = [];
+        this.cardLabels = [];
         this.triggerPoints = [];
         this.cardVisibility = [];
+        this.textureLoader = new THREE.TextureLoader();
     }
     
     setupCardTriggers(cameraPath, modelBox) {
-        // Increase the number of cards and distribute them more evenly
-        const cardCount = 10; // Increased from the original number
-        const cardSpacing = cameraPath.length / (cardCount + 1);
+        // Only start cards after the hero section (first 10% of the path)
+        const startPathIndex = Math.floor(cameraPath.length * 0.1);
         
-        for (let i = 0; i < cardCount; i++) {
-            // Calculate the path index with better spacing
-            const pathIndex = Math.floor((i + 1) * cardSpacing);
-            
-            if (pathIndex < cameraPath.length) {
-                const pathPoint = cameraPath[pathIndex];
-                
-                // Create a wider radius around the character to avoid crowding
-                const angle = Math.random() * Math.PI * 2;
-                const radiusMin = 8; // Minimum distance from character
-                const radiusMax = 15; // Maximum distance
-                const radius = radiusMin + Math.random() * (radiusMax - radiusMin);
-                
-                // Randomize height within a reasonable range around the path point
-                const heightVariation = 2;
-                const height = pathPoint.position.y + (Math.random() * heightVariation * 2 - heightVariation);
-                
-                // Create a card with these randomly distributed positions
-                const cardPosition = new THREE.Vector3(
-                    Math.sin(angle) * radius,
-                    height,
-                    Math.cos(angle) * radius
-                );
-                
-                // Add the card at this position
-                this.addCard(cardPosition, pathIndex);
-            }
+        // Define fixed positions for cards
+        const cardPositions = [
+            { x: 8, y: 4, z: 5, pathIndex: startPathIndex + 5 },
+            { x: -9, y: 2, z: 3, pathIndex: startPathIndex + 15 },
+            { x: 7, y: 0, z: -6, pathIndex: startPathIndex + 25 },
+            { x: -6, y: -2, z: -8, pathIndex: startPathIndex + 35 },
+            { x: 10, y: -1, z: 4, pathIndex: startPathIndex + 45 },
+            { x: -10, y: 1, z: -5, pathIndex: startPathIndex + 55 },
+            { x: 8, y: -3, z: -7, pathIndex: startPathIndex + 65 },
+            { x: -7, y: 3, z: 6, pathIndex: startPathIndex + 75 }
+        ];
+        
+        // Create cards using data from tabProjectCard
+        const projectCount = Math.min(tabProjectCard.length, cardPositions.length);
+        
+        for (let i = 0; i < projectCount; i++) {
+            const project = tabProjectCard[i];
+            const pos = cardPositions[i];
+            const cardPosition = new THREE.Vector3(pos.x, pos.y, pos.z);
+            this.addCard(cardPosition, pos.pathIndex, project);
         }
     }
     
-    createCard(index) {
-        const geometry = new THREE.PlaneGeometry(2, 1.5, 32, 32);
+    createCard(index, project) {
+        const geometry = new THREE.PlaneGeometry(3, 2, 32, 32);
         
-        // Create unique material with different colors and settings for each card
+        // Load texture from project URL
+        const texture = this.textureLoader.load(project.url);
+        texture.encoding = THREE.sRGBEncoding;
+        
+        // Create material with texture
         const material = new THREE.ShaderMaterial({
             uniforms: {
                 uTime: { value: 0 },
                 uColor: { value: new THREE.Color(this.getCardColor(index)) },
-                uDistortionFrequency: { value: 2.0 + index * 0.5 },
-                uDistortionStrength: { value: 0.2 },
+                uDistortionFrequency: { value: 3.0 + index * 0.5 },
+                uDistortionStrength: { value: 0.3 },
                 uVisibility: { value: 0.0 },
-                uTexture: { value: null }
+                uTexture: { value: texture }
             },
             vertexShader: cardVertexShader,
-            // fragmentShader: cardFragmentShader,
+            fragmentShader: `
+                uniform float uTime;
+                uniform vec3 uColor;
+                uniform float uVisibility;
+                uniform sampler2D uTexture;
+                
+                varying vec2 vUv;
+                
+                void main() {
+                    vec2 uv = vUv;
+                    vec4 textureColor = texture2D(uTexture, uv);
+                    
+                    // Apply slight color tint while preserving the texture
+                    vec3 finalColor = mix(textureColor.rgb, uColor, 0.2);
+                    
+                    // Apply visibility for fade in/out effect
+                    gl_FragColor = vec4(finalColor, textureColor.a * uVisibility);
+                }
+            `,
             transparent: true,
             side: THREE.DoubleSide
         });
         
         return new THREE.Mesh(geometry, material);
+    }
+    
+    createCardLabel(position, project) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        const context = canvas.getContext('2d');
+        
+        // Clear background
+        context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw text
+        context.font = 'bold 48px Syne, Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillStyle = 'white';
+        context.fillText(project.name, canvas.width / 2, canvas.height / 2);
+        
+        // Create texture
+        const texture = new THREE.CanvasTexture(canvas);
+        
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0
+        });
+        
+        const geometry = new THREE.PlaneGeometry(3, 0.75);
+        const label = new THREE.Mesh(geometry, material);
+        
+        // Position label above the card
+        label.position.copy(position);
+        label.position.y += 1.5;
+        
+        return label;
     }
     
     getCardColor(index) {
@@ -75,32 +128,42 @@ export class CardManager {
         this.triggerPoints.forEach((trigger, index) => {
             const distance = Math.abs(scrollY - trigger.pathPosition);
             
-            // Card is visible when scroll position is near the trigger point
-            if (distance < trigger.fadeDuration) {
-                // Calculate visibility factor (1 at trigger point, fading to 0)
-                this.cardVisibility[index] = 1 - (distance / trigger.fadeDuration);
+            if (distance > -trigger.fadeDuration && distance < 0) {
+                this.cardVisibility[index] = 1 + (distance / trigger.fadeDuration);
+            } else if (distance >= 0) {
+                this.cardVisibility[index] = 1;
             } else {
                 this.cardVisibility[index] = 0;
             }
             
-            // Apply visibility to shader
             if (this.cards[index] && this.cards[index].material) {
                 this.cards[index].material.uniforms.uVisibility.value = this.cardVisibility[index];
+            }
+            
+            if (this.cardLabels[index]) {
+                this.cardLabels[index].material.opacity = this.cardVisibility[index];
             }
         });
     }
     
-
-    addCard(position, pathIndex) {
-        const card = this.createCard(this.cards.length);
+    addCard(position, pathIndex, project) {
+        const card = this.createCard(this.cards.length, project);
         card.position.copy(position);
+        card.lookAt(0, position.y, 0);
+        
         this.scene.add(card);
         this.cards.push(card);
+        
+        // Create and add label
+        const label = this.createCardLabel(position, project);
+        label.lookAt(0, position.y, 0);
+        this.scene.add(label);
+        this.cardLabels.push(label);
         
         // Store trigger point for this card
         this.triggerPoints.push({
             pathPosition: pathIndex,
-            fadeDuration: 20 // Distance in scroll units where card fades in/out
+            fadeDuration: 20
         });
         
         // Store initial visibility for this card
@@ -108,7 +171,6 @@ export class CardManager {
     }
     
     update(time) {
-        // Update time uniform for all cards to animate shaders
         this.cards.forEach(card => {
             if (card.material && card.material.uniforms) {
                 card.material.uniforms.uTime.value = time;

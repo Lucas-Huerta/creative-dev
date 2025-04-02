@@ -264,14 +264,12 @@ class ThreeJSScene {
         const centerX = (modelBox.min.x + modelBox.max.x) / 2;
         const centerZ = (modelBox.min.z + modelBox.max.z) / 2;
         
-        // Create a path from top (head) to bottom (feet)
         for (let i = 0; i < this.totalPathLength; i++) {
             const t = i / (this.totalPathLength - 1);
             
             // Interpolate Y from top to bottom
             const y = topY - t * (topY - bottomY);
             
-            // Create a slight circular path around the model
             const angle = t * Math.PI * 2;
             const radius = 5; // Distance from model
             

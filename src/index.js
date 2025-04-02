@@ -5,6 +5,7 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import './style.css';
 import { vertexShader } from './shaders/blobShaders.js';
 import { CardManager } from './components/CardManager.js';
+import { StarryBackground } from './components/StarryBackground.js';
 
 class ThreeJSScene {
     constructor() {
@@ -30,6 +31,7 @@ class ThreeJSScene {
         this.loadingManager = new THREE.LoadingManager();
         this.loadingComplete = false;
         this.setupLoadingManager();
+        this.starryBackground = null;
 
         this.container = document.getElementById('scene-container');
         
@@ -75,7 +77,7 @@ class ThreeJSScene {
 
     init() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x1F1F1F);
+        this.scene.background = new THREE.Color(0x080810); // Darker background for stars
         
         this.camera = new THREE.PerspectiveCamera(
             30, 
@@ -89,6 +91,7 @@ class ThreeJSScene {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.container.appendChild(this.renderer.domElement);
         
+        this.starryBackground = new StarryBackground(this.scene);
         this.addShapes();
         this.addLights();
         this.addText();
@@ -229,7 +232,7 @@ class ThreeJSScene {
             
             this.textMesh = new THREE.Mesh(textGeometry, textMaterial);
             // Position text in center of the hero section
-            this.textMesh.position.set(-textWidth/2, 8, -10);
+            this.textMesh.position.set(-textWidth/2, 8, window.innerWidth > 768 ? -5 : -10);
 
             // Create a fixed camera and scene specifically for the text
             this.textScene = new THREE.Scene();
@@ -377,6 +380,10 @@ class ThreeJSScene {
 
         if (this.textMesh && this.textMesh.material.uniforms) {
             this.textMesh.material.uniforms.uTime.value = this.clock.getElapsedTime();
+        }
+
+        if (this.starryBackground) {
+            this.starryBackground.update(this.clock.getElapsedTime());
         }
     }
     

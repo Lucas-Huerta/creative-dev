@@ -16,6 +16,23 @@ export const tabProjectCard: CardProject[] = [
     name: "Consultim",
     url: "./imgs/consultim.png",
   },
+
+  {
+    name: "Proxidental",
+    url: "./imgs/proxidental.png",
+  },
+  {
+    name: "Consultim",
+    url: "./imgs/consultim.png",
+  },
+  {
+    name: "Forum Organisation",
+    url: "./imgs/casClientForumDesktop.png",
+  },
+  {
+    name: "Forum Organisation",
+    url: "./imgs/casClientForumDesktopMain.png",
+  },
   {
     name: "Proxidental",
     url: "./imgs/proxidental.png",

@@ -37,6 +37,7 @@ class ThreeJSScene {
         
         this.init();
         this.animate();
+        this.textInfo = document.getElementById('text-info');
     }
 
     setupLoadingManager() {
@@ -315,10 +316,19 @@ class ThreeJSScene {
         const pathIndex = Math.floor(this.scrollY);
         const pathPercent = this.scrollY - pathIndex;
         
+        // Update text title visibility
         if (this.scrollY < 1.0) {
             this.targetTextOpacity = 1.0;
+            if (this.textInfo) {
+                this.textInfo.style.opacity = 1.0;
+                this.textInfo.style.transform = 'translateY(0)';
+            }
         } else {
             this.targetTextOpacity = 0.0;
+            if (this.textInfo) {
+                this.textInfo.style.opacity = 0.0;
+                this.textInfo.style.transform = 'translateY(-50px)';
+            }
         }
         
         this.textOpacity += (this.targetTextOpacity - this.textOpacity) * this.textFadeSpeed;
